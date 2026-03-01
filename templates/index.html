@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Train Seat Map</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+    h1 { text-align: center; margin: 20px 0 30px; color: #1a237e; font-size: 1.8rem; }
+
+    /* Steps */
+    .step { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .step-header { font-size: 1.1rem; font-weight: 600; color: #1a237e; margin-bottom: 16px;
+                   display: flex; align-items: center; gap: 10px; }
+    .step-num { background: #1a237e; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center; font-size: 0.85rem; flex-shrink: 0; }
+    .step.disabled { opacity: 0.5; pointer-events: none; }
+
+    /* Inputs */
+    .input-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 0.8rem; color: #666; font-weight: 500; }
+    input, select { padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 6px; font-size: 0.95rem;
+                    outline: none; transition: border-color 0.2s; }
+    input:focus, select:focus { border-color: #1a237e; }
+    button { padding: 10px 24px; border: none; border-radius: 6px; font-size: 0.95rem; cursor: pointer;
+             background: #1a237e; color: #fff; font-weight: 500; transition: background 0.2s; }
+    button:hover { background: #283593; }
+    button:disabled { background: #999; cursor: not-allowed; }
+
+    /* Train info */
+    .train-info { margin-top: 14px; padding: 12px 16px; background: #e8eaf6; border-radius: 6px; }
+    .train-info h3 { color: #1a237e; margin-bottom: 6px; }
+
+    /* Route table */
+    .route-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    .route-table th { background: #1a237e; color: #fff; padding: 8px 10px; text-align: left; }
+    .route-table td { padding: 6px 10px; border-bottom: 1px solid #eee; }
+    .route-table tr:hover { background: #f5f5f5; }
+
+    /* Coach chips */
+    .coach-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .coach-chip { padding: 8px 16px; border-radius: 20px; border: 2px solid #1a237e; color: #1a237e;
+                  cursor: pointer; font-weight: 500; font-size: 0.85rem; transition: all 0.2s; background: #fff; }
+    .coach-chip:hover, .coach-chip.active { background: #1a237e; color: #fff; }
+
+    /* Seat map */
+    .seat-map-container { margin-top: 16px; }
+    .coach-title { font-size: 1.1rem; font-weight: 600; color: #1a237e; margin-bottom: 12px; }
+
+    /* Summary */
+    .quota-summary { margin-top: 16px; }
+    .quota-summary h4 { margin-bottom: 8px; color: #333; }
+    .summary-table { border-collapse: collapse; font-size: 0.85rem; }
+    .summary-table th, .summary-table td { padding: 6px 14px; border: 1px solid #ddd; text-align: left; }
+    .summary-table th { background: #f5f5f5; }
+    .summary-table th:not(:first-child), .summary-table td:not(:first-child) { text-align: center; }
+    .quota-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; color: #fff;
+                   font-size: 0.75rem; font-weight: 600; }
+
+    /* Seat grid — train coach style */
+    .compartment { border: 2px solid #999; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #fafafa; }
+    .compartment-label { font-size: 0.75rem; color: #666; margin-bottom: 8px; font-weight: 500; }
+    .berth-row { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
+    .berth-row .separator { width: 20px; }
+    .seat { width: 56px; height: 38px; border-radius: 5px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600;
+            border: 1.5px solid rgba(0,0,0,0.15); cursor: default; position: relative; }
+    .seat .seat-num { font-size: 0.75rem; }
+    .seat .seat-type { font-size: 0.55rem; opacity: 0.8; }
+    .seat.empty-slot { visibility: hidden; }
+
+    /* Quota colors — shared definitions used by seats, legend, and badges */
+    .quota-GN  { background: #a5d6a7; color: #1b5e20; }
+    .quota-TQ  { background: #90caf9; color: #0d47a1; }
+    .quota-SS  { background: #81d4fa; color: #01579b; }
+    .quota-RL  { background: #fff59d; color: #f57f17; }
+    .quota-PQ  { background: #ce93d8; color: #4a148c; }
+    .quota-HP  { background: #ffcc80; color: #e65100; }
+    .quota-FT  { background: #80deea; color: #006064; }
+    .quota-LD  { background: #ef9a9a; color: #b71c1c; }
+    .quota-HO  { background: #f48fb1; color: #880e4f; }
+    .quota-DF  { background: #b0bec5; color: #263238; }
+    .quota-YU  { background: #c5e1a5; color: #33691e; }
+    .quota-RC  { background: #ffab91; color: #bf360c; }
+    .quota-WL  { background: #ef5350; color: #fff; }
+    .quota-RAC { background: #ffa726; color: #fff; }
+    .quota-CNF { background: #66bb6a; color: #fff; }
+    .quota-US  { background: #b39ddb; color: #311b92; }
+    .quota-MC  { background: #a1887f; color: #3e2723; }
+    .quota-RE  { background: #80cbc4; color: #004d40; }
+    .quota-PT  { background: #dce775; color: #827717; }
+    .quota-OS  { background: #ffe082; color: #ff6f00; }
+    .quota-RS  { background: #f8bbd0; color: #880e4f; }
+    .quota-GQ  { background: #bcaaa4; color: #3e2723; }
+    .quota-PH  { background: #c8e6c9; color: #1b5e20; }
+    .quota-DP  { background: #d7ccc8; color: #4e342e; }
+    .quota-LB  { background: #ffe0b2; color: #e65100; }
+    .quota-GNRS { background: #c5cae9; color: #1a237e; }
+    .quota-UNKNOWN { background: #e0e0e0; color: #555; }
+
+    /* Vacant seats always use the dashed green style */
+    .seat.vacant { background: #fff !important; border: 2px dashed #4caf50 !important; color: #388e3c !important; }
+
+    /* Occupancy stats bar */
+    .occupancy-bar { display: flex; align-items: center; gap: 16px; margin: 12px 0; font-size: 0.85rem; flex-wrap: wrap; }
+    .occ-stat { display: flex; align-items: center; gap: 5px; }
+    .occ-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+    .occ-dot.occupied { background: #e53935; }
+    .occ-dot.vacant { background: #fff; border: 2px dashed #4caf50; }
+    .occ-progress { flex: 1; min-width: 120px; max-width: 300px; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+    .occ-progress-fill { height: 100%; background: #e53935; border-radius: 4px; transition: width 0.3s; }
+
+    /* Legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; margin-bottom: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; }
+    .legend-color { width: 18px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); }
+
+    /* Collapsible seat layout */
+    .seat-layout-toggle { margin: 12px 0; }
+    .seat-layout-toggle summary { font-size: 0.9rem; font-weight: 500; color: #1a237e; cursor: pointer;
+                                   padding: 8px 12px; background: #e8eaf6; border-radius: 6px; user-select: none; }
+    .seat-layout-toggle summary:hover { background: #c5cae9; }
+    .seat-layout-toggle[open] summary { border-radius: 6px 6px 0 0; margin-bottom: 0; }
+
+    /* Collapsible class group */
+    .class-group-toggle { border: 1.5px solid #c5cae9; border-radius: 8px; overflow: hidden; }
+    .class-group-toggle summary { font-size: 0.9rem; color: #1a237e; cursor: pointer;
+                                   padding: 10px 14px; background: #e8eaf6; user-select: none; list-style: none; }
+    .class-group-toggle summary::-webkit-details-marker { display: none; }
+    .class-group-toggle summary::before { content: '\25B6'; margin-right: 8px; font-size: 0.7rem; display: inline-block; transition: transform 0.2s; }
+    .class-group-toggle[open] summary::before { transform: rotate(90deg); }
+    .class-group-toggle summary:hover { background: #c5cae9; }
+    .class-group-toggle[open] summary { border-bottom: 1px solid #c5cae9; }
+
+    /* Collapsible individual coach */
+    .coach-toggle { border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+    .coach-toggle summary { font-size: 0.88rem; color: #333; cursor: pointer;
+                             padding: 8px 12px; background: #f5f5f5; user-select: none; list-style: none; }
+    .coach-toggle summary::-webkit-details-marker { display: none; }
+    .coach-toggle summary::before { content: '\25B6'; margin-right: 8px; font-size: 0.65rem; display: inline-block; transition: transform 0.2s; color: #1a237e; }
+    .coach-toggle[open] summary::before { transform: rotate(90deg); }
+    .coach-toggle summary:hover { background: #eee; }
+    .coach-toggle[open] summary { border-bottom: 1px solid #ddd; }
+
+    /* Vacant berth finder */
+    .vacant-coach-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+    .vacant-coach-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.9rem; }
+    .vacant-coach-count { background: #e8f5e9; color: #2e7d32; font-size: 0.75rem; font-weight: 600;
+                          padding: 2px 8px; border-radius: 10px; }
+    .vacant-berth-group { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+    .vacant-berth-label { font-size: 0.75rem; font-weight: 600; color: #666; min-width: 24px; }
+    .vacant-berth-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .vacant-berth-chip { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 0.8rem;
+                         font-weight: 500; background: #fff; border: 1.5px solid #4caf50; color: #2e7d32;
+                         cursor: pointer; transition: all 0.15s; }
+    .vacant-berth-chip:hover { background: #4caf50; color: #fff; transform: scale(1.08); }
+
+    /* Loading */
+    .loading { text-align: center; padding: 20px; color: #666; }
+    .loading::after { content: ''; display: inline-block; width: 18px; height: 18px;
+                      border: 2.5px solid #1a237e; border-top-color: transparent; border-radius: 50%;
+                      animation: spin 0.8s linear infinite; margin-left: 8px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error { color: #c62828; background: #ffebee; padding: 10px 14px; border-radius: 6px; margin-top: 10px; }
+
+    /* Raw JSON viewer */
+    .raw-toggle { font-size: 0.8rem; color: #1a237e; cursor: pointer; margin-top: 10px; text-decoration: underline; }
+    .raw-json { display: none; background: #263238; color: #eee; padding: 12px; border-radius: 6px;
+                margin-top: 8px; max-height: 400px; overflow: auto; font-size: 0.75rem;
+                font-family: 'Courier New', monospace; white-space: pre-wrap; }
+    .raw-json.visible { display: block; }
+
+    /* Clickable seats */
+    .seat:not(.empty-slot) { cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+    .seat:not(.empty-slot):hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 2; }
+
+    /* Seat info popup */
+    .seat-popup-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4);
+                          z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .seat-popup { background: #fff; border-radius: 10px; padding: 0; max-width: 600px; width: 90%;
+                  box-shadow: 0 8px 32px rgba(0,0,0,0.25); overflow: hidden; }
+    .seat-popup-header { display: flex; align-items: center; justify-content: space-between;
+                         padding: 14px 18px; border-bottom: 1px solid #eee; }
+    .seat-popup-header h3 { margin: 0; font-size: 1rem; color: #1a237e; }
+    .seat-popup-close { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #999;
+                        padding: 0 4px; line-height: 1; }
+    .seat-popup-close:hover { color: #333; }
+    .seat-popup-body { padding: 14px 18px; }
+    .seat-popup-body table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .seat-popup-body td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+    .seat-popup-body td:first-child { color: #888; font-weight: 500; white-space: nowrap; width: 110px; }
+    .seat-popup-body td:last-child { color: #333; }
+    .seat-popup-bsd { margin-top: 10px; }
+    .seat-popup-bsd h4 { font-size: 0.85rem; color: #1a237e; margin-bottom: 6px; }
+    .seat-popup-bsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
+    .seat-popup-bsd th { background: #f5f5f5; padding: 5px 8px; text-align: left; font-weight: 500; }
+    .seat-popup-bsd td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; word-wrap: break-word; }
+    .seat-popup-bsd th:nth-child(1) { width: 6%; }
+    .seat-popup-bsd th:nth-child(2) { width: 14%; }
+    .seat-popup-bsd th:nth-child(3) { width: 30%; }
+    .seat-popup-bsd th:nth-child(4) { width: 30%; }
+    .seat-popup-bsd th:nth-child(5) { width: 20%; }
+    .seat-popup-raw { margin-top: 10px; }
+    .seat-popup-raw summary { font-size: 0.8rem; color: #1a237e; cursor: pointer; }
+    .seat-popup-raw pre { background: #263238; color: #eee; padding: 10px; border-radius: 6px;
+                          font-size: 0.72rem; max-height: 200px; overflow: auto; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Train Seat Map Viewer</h1>
+
+    <!-- Cookie status bar -->
+    <div class="step" id="cookieBar" style="padding:14px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="cookieDot" style="width:10px;height:10px;border-radius:50%;background:#999;display:inline-block;"></span>
+        <span id="cookieText" style="font-size:0.85rem; color:#666;">Checking cookies...</span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="refreshCookies()" style="padding:6px 16px; font-size:0.8rem;">Refresh Cookies</button>
+        <button onclick="clearCache()" style="padding:6px 16px; font-size:0.8rem; background:#e65100;">Clear Cache</button>
+      </div>
+    </div>
+
+    <!-- Step 1: Train Number -->
+    <div class="step" id="step1">
+      <div class="step-header"><span class="step-num">1</span> Search Train</div>
+      <div class="input-row">
+        <div class="field">
+          <label>Train Number</label>
+          <input type="text" id="trainNo" placeholder="e.g. 13307" maxlength="6">
+        </div>
+        <button id="searchBtn" onclick="searchTrain()">Search</button>
+      </div>
+      <div id="trainResult"></div>
+    </div>
+
+    <!-- Step 2: Station + Date → Coaches -->
+    <div class="step disabled" id="step2">
+      <div class="step-header"><span class="step-num">2</span> Select Station &amp; Get Coaches</div>
+      <div class="input-row">
+        <div class="field">
+          <label>Boarding Station</label>
+          <select id="stationSelect"></select>
+        </div>
+        <div class="field">
+          <label>Journey Date</label>
+          <input type="date" id="jDate">
+        </div>
+        <button onclick="getCoaches()">Get Coaches</button>
+      </div>
+      <div id="coachResult"></div>
+    </div>
+
+    <!-- Step 3: Seat Map -->
+    <div class="step disabled" id="step3">
+      <div class="step-header"><span class="step-num">3</span> Seat Map</div>
+      <div id="seatMapActions"></div>
+      <div id="seatMapResult"></div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let trainData = null;
+    let compositionData = null;
+    let trainSourceStation = '';
+    let coachList = [];  // parsed list of { coachName, classCode }
+    let stationNameMap = {};  // stationCode → stationName lookup
+    let chartPrepTime = '';   // chart preparation time from trainComposition API
+    let _allCoachResults = [];  // cached results from fetchAllCoaches
+
+    // Set default date to today
+    document.getElementById('jDate').valueAsDate = new Date();
+
+    // ── Cookie management ─────────────────────────────────────────────
+
+    async function checkCookies() {
+      try {
+        const resp = await fetch('/api/cookie-status');
+        const data = await resp.json();
+        updateCookieUI(data);
+      } catch (e) {
+        updateCookieUI({ count: 0, ready: false });
+      }
+    }
+
+    async function refreshCookies() {
+      document.getElementById('cookieText').textContent = 'Fetching cookies from IRCTC...';
+      document.getElementById('cookieDot').style.background = '#ffa726';
+      try {
+        const resp = await fetch('/api/refresh-cookies', { method: 'POST' });
+        const data = await resp.json();
+        updateCookieUI(data);
+        if (data.error) {
+          document.getElementById('cookieText').textContent = data.error;
+        }
+      } catch (e) {
+        updateCookieUI({ count: 0, ready: false });
+      }
+    }
+
+    function updateCookieUI(data) {
+      const dot = document.getElementById('cookieDot');
+      const text = document.getElementById('cookieText');
+      if (data.count > 0) {
+        dot.style.background = '#4caf50';
+        text.textContent = `Session active — ${data.count} cookies`;
+      } else {
+        dot.style.background = '#f44336';
+        text.textContent = 'No cookies — click Refresh to fetch from IRCTC';
+      }
+    }
+
+    checkCookies();
+
+    async function clearCache() {
+      try {
+        const resp = await fetch('/api/clear-cache', { method: 'POST' });
+        const data = await resp.json();
+        alert(data.message || 'Cache cleared');
+      } catch (e) {
+        alert('Failed to clear cache');
+      }
+    }
+
+    function cacheBadge() {
+      return '<span style="display:inline-block;padding:1px 8px;border-radius:8px;background:#fff3e0;color:#e65100;font-size:0.72rem;font-weight:600;margin-left:6px;">CACHED</span>';
+    }
+
+    document.getElementById('trainNo').addEventListener('keydown', e => {
+      if (e.key === 'Enter') searchTrain();
+    });
+
+    // ── Step 1: Search Train ──────────────────────────────────────────
+
+    async function searchTrain() {
+      const trainNo = document.getElementById('trainNo').value.trim();
+      if (!trainNo) return;
+
+      const resultDiv = document.getElementById('trainResult');
+      resultDiv.innerHTML = '<div class="loading">Fetching train info</div>';
+      document.getElementById('step2').classList.add('disabled');
+      document.getElementById('step3').classList.add('disabled');
+
+      try {
+        const resp = await fetch(`/api/train-schedule/${trainNo}`);
+        const data = await resp.json();
+
+        if (data.error || data.errorMessage) {
+          resultDiv.innerHTML = `<div class="error">${data.errorMessage || data.error}</div>`;
+          return;
+        }
+
+        trainData = data;
+        renderTrainInfo(data);
+      } catch (e) {
+        resultDiv.innerHTML = `<div class="error">Request failed: ${e.message}</div>`;
+      }
+    }
+
+    function renderTrainInfo(data) {
+      const resultDiv = document.getElementById('trainResult');
+      const trainName = data.trainName || '';
+      const trainNumber = data.trainNumber || '';
+      const stations = data.stationList || [];
+
+      // Build station name lookup
+      stationNameMap = {};
+      stations.forEach(s => {
+        stationNameMap[s.stationCode] = s.stationName;
+      });
+
+      if (!stations.length) {
+        resultDiv.innerHTML = `
+          <div class="train-info"><h3>Response received but no station list found</h3></div>
+          <div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>
+          <div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+        return;
+      }
+
+      const select = document.getElementById('stationSelect');
+      select.innerHTML = '';
+      stations.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.stationCode;
+        opt.textContent = `${s.stationCode} - ${s.stationName}`;
+        select.appendChild(opt);
+      });
+
+      trainSourceStation = stations[0].stationCode || '';
+
+      const src = stations[0].stationCode;
+      const dst = stations[stations.length - 1].stationCode;
+      const cached = data._cached ? cacheBadge() : '';
+      let html = `<div class="train-info"><h3>${trainNumber} — ${trainName}${cached}</h3>
+        <span style="font-size:0.85rem;color:#555;">${src} → ${dst} &middot; ${stations.length} stops</span>
+      </div>`;
+
+      // Collapsible schedule — closed by default
+      html += `<div class="raw-toggle" onclick="const t=this.nextElementSibling; t.classList.toggle('visible'); this.textContent = t.classList.contains('visible') ? 'Hide schedule' : 'Show schedule (${stations.length} stops)';">Show schedule (${stations.length} stops)</div>`;
+      html += `<div class="raw-json" style="background:#fff;color:#333;max-height:none;padding:0;">
+        <table class="route-table"><thead><tr>
+          <th>#</th><th>Station</th><th>Code</th><th>Arr</th><th>Dep</th><th>Day</th>
+        </tr></thead><tbody>`;
+      stations.forEach((s, i) => {
+        html += `<tr><td>${i + 1}</td><td>${s.stationName}</td><td>${s.stationCode}</td><td>${s.arrivalTime || '--'}</td><td>${s.departureTime || '--'}</td><td>${s.dayCount || ''}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      html += `<div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>`;
+      html += `<div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+
+      resultDiv.innerHTML = html;
+      document.getElementById('step2').classList.remove('disabled');
+    }
+
+    // ── Step 2: Get Coaches ───────────────────────────────────────────
+
+    async function getCoaches() {
+      const trainNo = document.getElementById('trainNo').value.trim();
+      const boardingStation = document.getElementById('stationSelect').value;
+      const jDate = document.getElementById('jDate').value;
+      if (!trainNo || !boardingStation || !jDate) return;
+
+      const resultDiv = document.getElementById('coachResult');
+      resultDiv.innerHTML = '<div class="loading">Fetching coaches</div>';
+      document.getElementById('step3').classList.add('disabled');
+
+      try {
+        const resp = await fetch('/api/train-composition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trainNo, jDate, boardingStation })
+        });
+        const data = await resp.json();
+
+        if (data.error || data.errorMessage) {
+          resultDiv.innerHTML = `<div class="error">${data.errorMessage || data.error}</div>`;
+          return;
+        }
+
+        compositionData = data;
+        renderCoaches(data);
+      } catch (e) {
+        resultDiv.innerHTML = `<div class="error">Request failed: ${e.message}</div>`;
+      }
+    }
+
+    function renderCoaches(data) {
+      const resultDiv = document.getElementById('coachResult');
+
+      // Extract chart preparation time from response
+      chartPrepTime = data.chartPreparationTime || data.chartPrepTime || data.chartTime || '';
+
+      // IRCTC returns { cdd: [ { coachName, classCode, positionFromEngine, vacantBerths }, ... ] }
+      let coaches = data.cdd || data.coachList || [];
+      if (Array.isArray(data) && !coaches.length) coaches = data;
+
+      if (!coaches.length) {
+        resultDiv.innerHTML = `
+          <div class="error">No coaches found in response. Check raw data.</div>
+          <div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>
+          <div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+        return;
+      }
+
+      // Normalize and store
+      coachList = coaches.map(c => {
+        if (typeof c === 'string') return { coachName: c, classCode: '' };
+        return {
+          coachName: c.coachName || c.name || '',
+          classCode: c.classCode || c.cls || '',
+          position: c.positionFromEngine || 0,
+          vacantBerths: c.vacantBerths || 0,
+        };
+      });
+
+      let html = '';
+
+      // Chart preparation time
+      const coachCached = data._cached ? cacheBadge() : '';
+      if (chartPrepTime) {
+        html += `<div class="train-info" style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:0.85rem;"><strong>Chart Prepared:</strong> ${chartPrepTime}${coachCached}</span>
+        </div>`;
+      } else if (coachCached) {
+        html += `<div class="train-info" style="margin-bottom:12px;">${coachCached}</div>`;
+      }
+
+      html += '<div class="coach-list">';
+      coachList.forEach(c => {
+        const label = c.classCode ? `${c.coachName} (${c.classCode})` : c.coachName;
+        html += `<div class="coach-chip" data-coach="${c.coachName}" data-cls="${c.classCode}" onclick="selectCoach(this)">${label}</div>`;
+      });
+      html += '</div>';
+
+      html += `<div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>`;
+      html += `<div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+      resultDiv.innerHTML = html;
+
+      // Enable step 3 with action buttons
+      document.getElementById('step3').classList.remove('disabled');
+      document.getElementById('seatMapActions').innerHTML = `
+        <div class="input-row" style="margin-bottom:16px;">
+          <button onclick="fetchAllCoaches()" style="background:#2e7d32;">Fetch All Coaches</button>
+          <span style="font-size:0.85rem; color:#666; align-self:center;">or click individual coaches above</span>
+        </div>`;
+      document.getElementById('seatMapResult').innerHTML = '';
+    }
+
+    // ── Step 3: Seat Map ──────────────────────────────────────────────
+
+    function getCommonParams() {
+      return {
+        trainNo: document.getElementById('trainNo').value.trim(),
+        boardingStation: document.getElementById('stationSelect').value,
+        jDate: document.getElementById('jDate').value,
+      };
+    }
+
+    async function selectCoach(el) {
+      document.querySelectorAll('.coach-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      // Reset seat data store
+      Object.keys(_seatDataStore).forEach(k => delete _seatDataStore[k]);
+      Object.keys(_seatByCoachBerth).forEach(k => delete _seatByCoachBerth[k]);
+      _seatIdCounter = 0;
+
+      const coachName = el.dataset.coach;
+      const cls = el.dataset.cls;
+
+      const resultDiv = document.getElementById('seatMapResult');
+      resultDiv.innerHTML = '<div class="loading">Fetching seat map</div>';
+
+      const data = await fetchCoachData(coachName, cls);
+      if (!data) return;
+
+      const badge = data._cached ? cacheBadge() : '';
+      resultDiv.innerHTML = badge + renderSingleCoach(data, coachName);
+    }
+
+    async function fetchAllCoaches() {
+      const resultDiv = document.getElementById('seatMapResult');
+      document.querySelectorAll('.coach-chip').forEach(c => c.classList.remove('active'));
+      // Reset seat data store and coach results cache
+      Object.keys(_seatDataStore).forEach(k => delete _seatDataStore[k]);
+      Object.keys(_seatByCoachBerth).forEach(k => delete _seatByCoachBerth[k]);
+      _seatIdCounter = 0;
+      _allCoachResults = [];
+
+      // Show progress
+      let html = '<div class="loading">Fetching all coaches (0/' + coachList.length + ')</div>';
+      resultDiv.innerHTML = html;
+
+      const results = [];
+      let done = 0;
+
+      // Fetch sequentially to avoid overwhelming IRCTC
+      for (const coach of coachList) {
+        done++;
+        resultDiv.querySelector('.loading').textContent = `Fetching all coaches (${done}/${coachList.length}) — ${coach.coachName}`;
+
+        const data = await fetchCoachData(coach.coachName, coach.classCode);
+        if (data) {
+          results.push({ data, coachName: coach.coachName, classCode: coach.classCode, cached: !!data._cached });
+        } else {
+          results.push({ error: true, coachName: coach.coachName, classCode: coach.classCode });
+        }
+      }
+
+      // Render all — group by coach class
+      const allQuotaCounts = {};
+      const allSeats = [];
+      let totalOccupied = 0, totalVacant = 0, totalAll = 0;
+
+      // Group results by class type
+      const classGroups = {};  // { classCode: { coaches: [...], seats: [...] } }
+      const classOrder = ['1A','2A','3A','3E','CC','EC','EA','FC','SL','2S'];
+
+      results.forEach(r => {
+        const cls = r.classCode || detectCoachType(r.coachName);
+        if (!classGroups[cls]) classGroups[cls] = { coaches: [], seats: [] };
+        classGroups[cls].coaches.push(r);
+
+        if (!r.error) {
+          const seats = extractSeats(r.data);
+          classGroups[cls].seats.push(...seats);
+          allSeats.push(...seats);
+          totalAll += seats.length;
+          seats.forEach(s => {
+            if (s.occupied) {
+              totalOccupied++;
+              const q = quotaCode(s.quota);
+              allQuotaCounts[q] = (allQuotaCounts[q] || 0) + 1;
+            } else {
+              totalVacant++;
+            }
+          });
+        }
+      });
+
+      const overallPct = totalAll > 0 ? Math.round((totalOccupied / totalAll) * 100) : 0;
+
+      // Chart preparation time banner
+      let summaryHtml = '';
+      if (chartPrepTime) {
+        summaryHtml += `<div class="train-info" style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:0.9rem;"><strong>Chart Prepared:</strong> ${chartPrepTime}</span>
+        </div>`;
+      }
+
+      // Overall summary — its own collapsible
+      summaryHtml += `<details class="class-group-toggle" style="margin-bottom:16px;">`;
+      summaryHtml += `<summary><strong>Overall Summary</strong>
+        <span style="margin-left:12px; font-size:0.85rem; color:#666;">${totalOccupied} occupied / ${totalVacant} vacant / ${totalAll} total (${overallPct}%)</span></summary>`;
+      summaryHtml += `<div style="padding:12px 8px 4px 8px;">`;
+
+      summaryHtml += `<div class="occupancy-bar" style="margin-bottom:8px;">
+        <div class="occ-stat"><span class="occ-dot occupied"></span> Occupied: <strong>${totalOccupied}</strong></div>
+        <div class="occ-stat"><span class="occ-dot vacant"></span> Vacant: <strong>${totalVacant}</strong></div>
+        <div class="occ-stat">Total: <strong>${totalAll}</strong></div>
+        <div class="occ-progress"><div class="occ-progress-fill" style="width:${overallPct}%"></div></div>
+        <span style="font-size:0.8rem;color:#666;">${overallPct}% occupied</span>
+      </div>`;
+
+      summaryHtml += '<div class="quota-summary" style="margin-bottom:16px;"><h4>Quota Summary (Occupied Seats)</h4>';
+      summaryHtml += '<table class="summary-table"><thead><tr><th>Quota</th><th>Full Name</th><th>Count</th></tr></thead><tbody>';
+      Object.entries(allQuotaCounts).sort((a, b) => b[1] - a[1]).forEach(([q, count]) => {
+        const fullName = QUOTA_FULL_NAMES[q] || '';
+        summaryHtml += `<tr><td><span class="quota-badge quota-${sanitizeQuota(q)}">${q}</span></td><td>${fullName}</td><td>${count}</td></tr>`;
+      });
+      summaryHtml += `<tr style="font-weight:600"><td colspan="2">Occupied</td><td>${totalOccupied}</td></tr>`;
+      summaryHtml += `<tr style="font-weight:600;color:#388e3c;"><td colspan="2">Vacant</td><td>${totalVacant}</td></tr>`;
+      summaryHtml += `<tr style="font-weight:600"><td colspan="2">Total</td><td>${totalAll}</td></tr>`;
+      summaryHtml += '</tbody></table></div>';
+
+      summaryHtml += renderQuotaBerthTable(allSeats);
+
+      summaryHtml += '</div></details>'; // close overall summary
+
+      // Per-class summaries — each its own collapsible, siblings to overall
+      const sortedClasses = Object.keys(classGroups).sort((a, b) => {
+        const ia = classOrder.indexOf(a), ib = classOrder.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+
+      sortedClasses.forEach(cls => {
+        const grp = classGroups[cls];
+        const clsSeats = grp.seats;
+        const coachNames = grp.coaches.map(c => c.coachName).join(', ');
+        const clsOcc = clsSeats.filter(s => s.occupied).length;
+        const clsVac = clsSeats.length - clsOcc;
+        const clsPct = clsSeats.length > 0 ? Math.round((clsOcc / clsSeats.length) * 100) : 0;
+
+        // Quota counts for this class
+        const clsQuotaCounts = {};
+        clsSeats.filter(s => s.occupied).forEach(s => {
+          const q = quotaCode(s.quota);
+          clsQuotaCounts[q] = (clsQuotaCounts[q] || 0) + 1;
+        });
+
+        summaryHtml += `<details class="class-group-toggle" style="margin-bottom:16px;">`;
+        summaryHtml += `<summary><strong>${classLabel(cls)} (${cls})</strong> — ${grp.coaches.length} coach${grp.coaches.length > 1 ? 'es' : ''}: ${coachNames}
+          <span style="margin-left:12px; font-size:0.85rem; color:#666;">${clsOcc} occupied / ${clsVac} vacant / ${clsSeats.length} total (${clsPct}%)</span></summary>`;
+
+        summaryHtml += `<div style="padding:12px 0 4px 8px;">`;
+
+        // Occupancy bar for this class
+        summaryHtml += `<div class="occupancy-bar" style="margin-bottom:8px;">
+          <div class="occ-stat"><span class="occ-dot occupied"></span> Occupied: <strong>${clsOcc}</strong></div>
+          <div class="occ-stat"><span class="occ-dot vacant"></span> Vacant: <strong>${clsVac}</strong></div>
+          <div class="occ-stat">Total: <strong>${clsSeats.length}</strong></div>
+          <div class="occ-progress"><div class="occ-progress-fill" style="width:${clsPct}%"></div></div>
+          <span style="font-size:0.8rem;color:#666;">${clsPct}%</span>
+        </div>`;
+
+        // Quota summary for this class
+        summaryHtml += '<div class="quota-summary"><h4>Quota Summary</h4>';
+        summaryHtml += '<table class="summary-table"><thead><tr><th>Quota</th><th>Full Name</th><th>Count</th></tr></thead><tbody>';
+        Object.entries(clsQuotaCounts).sort((a, b) => b[1] - a[1]).forEach(([q, count]) => {
+          const fullName = QUOTA_FULL_NAMES[q] || '';
+          summaryHtml += `<tr><td><span class="quota-badge quota-${sanitizeQuota(q)}">${q}</span></td><td>${fullName}</td><td>${count}</td></tr>`;
+        });
+        summaryHtml += `<tr style="font-weight:600"><td colspan="2">Occupied</td><td>${clsOcc}</td></tr>`;
+        summaryHtml += `<tr style="font-weight:600;color:#388e3c;"><td colspan="2">Vacant</td><td>${clsVac}</td></tr>`;
+        summaryHtml += `<tr style="font-weight:600"><td colspan="2">Total</td><td>${clsSeats.length}</td></tr>`;
+        summaryHtml += '</tbody></table></div>';
+
+        // Quota × Berth Type for this class
+        summaryHtml += renderQuotaBerthTable(clsSeats);
+
+        // Individual coaches within this class group
+        grp.coaches.forEach(r => {
+          if (r.error) {
+            summaryHtml += `<div class="compartment" style="margin:8px 0;"><div class="coach-title">${r.coachName} (${r.classCode})</div><div class="error">Failed to fetch</div></div>`;
+          } else {
+            const cSeats = extractSeats(r.data);
+            const cOcc = cSeats.filter(s => s.occupied).length;
+            const cVac = cSeats.length - cOcc;
+            const cPct = cSeats.length > 0 ? Math.round((cOcc / cSeats.length) * 100) : 0;
+            const coachCacheBadge = r.cached ? cacheBadge() : '';
+            summaryHtml += `<details class="coach-toggle" style="margin:8px 0;">`;
+            summaryHtml += `<summary><strong>${r.coachName}</strong>${coachCacheBadge}`;
+            summaryHtml += ` <span style="font-size:0.82rem; color:#666;">${cOcc} occ / ${cVac} vac / ${cSeats.length} total (${cPct}%)</span>`;
+            summaryHtml += `</summary>`;
+            summaryHtml += `<div style="padding:8px 4px 4px 8px;">`;
+            summaryHtml += renderSingleCoach(r.data, r.coachName);
+            summaryHtml += `</div></details>`;
+          }
+        });
+
+        summaryHtml += '</div></details>';
+      });
+
+      // Store for findVacantBerths
+      _allCoachResults = results;
+
+      // ── Vacant Berth Finder ──────────────────────────────────────────
+      const boardingStn = document.getElementById('stationSelect').value;
+      const routeStations = trainData?.stationList || [];
+      const lastStn = routeStations.length ? routeStations[routeStations.length - 1].stationCode : '';
+      const stnOpts = routeStations.map(s =>
+        `<option value="${s.stationCode}">${s.stationCode} — ${s.stationName}</option>`
+      ).join('');
+
+      summaryHtml += `<div style="background:#fff;border:1.5px solid #c5cae9;border-radius:8px;padding:16px;margin-bottom:16px;" id="vacantFinderSection">
+        <div style="font-weight:600;color:#1a237e;margin-bottom:12px;font-size:0.95rem;">Find Vacant Berths Between Stations</div>
+        <div class="input-row" style="align-items:end;flex-wrap:wrap;">
+          <div class="field"><label>From Station</label><select id="vacantFromStn">${stnOpts}</select></div>
+          <div class="field"><label>To Station</label><select id="vacantToStn">${stnOpts}</select></div>
+          <button onclick="findVacantBerths()" style="background:#1565c0;">Find Vacant Berths</button>
+        </div>
+        <div id="vacantResult" style="margin-top:16px;"></div>
+      </div>`;
+
+      resultDiv.innerHTML = summaryHtml;
+
+      // Default From = boarding station, To = last station
+      const fromSel = document.getElementById('vacantFromStn');
+      const toSel = document.getElementById('vacantToStn');
+      if (fromSel) fromSel.value = boardingStn;
+      if (toSel && lastStn) toSel.value = lastStn;
+    }
+
+    function findVacantBerths() {
+      const fromStn = document.getElementById('vacantFromStn').value;
+      const toStn = document.getElementById('vacantToStn').value;
+      const resultDiv = document.getElementById('vacantResult');
+
+      if (!_allCoachResults.length) {
+        resultDiv.innerHTML = '<div class="error">No coach data loaded. Click "Fetch All Coaches" first.</div>';
+        return;
+      }
+
+      const routeStations = trainData?.stationList || [];
+      const stnOrder = routeStations.map(s => s.stationCode);
+      const fromIdx = stnOrder.indexOf(fromStn);
+      const toIdx = stnOrder.indexOf(toStn);
+
+      if (fromIdx === -1 || toIdx === -1) {
+        resultDiv.innerHTML = '<div class="error">Station not found in route.</div>';
+        return;
+      }
+      if (fromIdx >= toIdx) {
+        resultDiv.innerHTML = '<div class="error">From station must come before To station on the route.</div>';
+        return;
+      }
+
+      const classOrder = ['1A','2A','3A','3E','CC','EC','EA','FC','SL','2S'];
+      const vacantByClass = {};  // { cls: { coaches: [{ coachName, seats }] } }
+
+      _allCoachResults.forEach(r => {
+        if (r.error) return;
+        const cls = r.classCode || detectCoachType(r.coachName);
+        const seats = extractSeats(r.data);
+
+        const vacantSeats = seats.filter(seat => {
+          if (!seat.allQuotas || !seat.allQuotas.length) return !seat.occupied;
+
+          // Segments that overlap with the requested journey
+          const overlapping = seat.allQuotas.filter(seg => {
+            const si = stnOrder.indexOf(seg.from);
+            const ti = stnOrder.indexOf(seg.to);
+            if (si === -1 || ti === -1) return false;
+            return si < toIdx && ti > fromIdx;
+          });
+
+          if (!overlapping.length) return false;
+          return overlapping.every(seg => seg.occupancy === false);
+        });
+
+        if (vacantSeats.length) {
+          if (!vacantByClass[cls]) vacantByClass[cls] = { coaches: [] };
+          vacantByClass[cls].coaches.push({ coachName: r.coachName, seats: vacantSeats });
+        }
+      });
+
+      const sortedClasses = Object.keys(vacantByClass).sort((a, b) => {
+        const ia = classOrder.indexOf(a), ib = classOrder.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+
+      if (!sortedClasses.length) {
+        resultDiv.innerHTML = '<div style="padding:12px;color:#388e3c;font-weight:500;">No vacant berths found for this journey segment.</div>';
+        return;
+      }
+
+      const fromName = routeStations[fromIdx]?.stationName || fromStn;
+      const toName = routeStations[toIdx]?.stationName || toStn;
+
+      const berthTypeOrder = ['LB','MB','UB','SL','SU','CB'];
+      const usedBT = new Set();
+      sortedClasses.forEach(cls =>
+        vacantByClass[cls].coaches.forEach(c =>
+          c.seats.forEach(s => { if (s.type) usedBT.add(s.type); })
+        )
+      );
+      const sortedBT = berthTypeOrder.filter(bt => usedBT.has(bt));
+
+      // Grand totals
+      let grandTotal = 0;
+      const grandByBT = {};
+      sortedClasses.forEach(cls => {
+        vacantByClass[cls].coaches.forEach(c => {
+          c.seats.forEach(s => {
+            grandTotal++;
+            const bt = s.type || '?';
+            grandByBT[bt] = (grandByBT[bt] || 0) + 1;
+          });
+        });
+      });
+
+      let html = `<div style="margin-bottom:14px;padding:10px 14px;background:#e8f5e9;border-radius:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:0.95rem;"><strong style="color:#2e7d32;">${grandTotal}</strong> vacant berths</span>
+        <span style="font-size:0.85rem;color:#555;">${fromStn} (${fromName}) → ${toStn} (${toName})</span>
+      </div>`;
+
+      // Summary cross-tab: coach type × berth type
+      html += '<table class="summary-table" style="margin-bottom:16px;"><thead><tr>';
+      html += '<th>Coach Type</th><th>Coaches</th><th>Total</th>';
+      sortedBT.forEach(bt => { html += `<th>${bt}</th>`; });
+      html += '</tr></thead><tbody>';
+      sortedClasses.forEach(cls => {
+        const grp = vacantByClass[cls];
+        const allSeats = grp.coaches.flatMap(c => c.seats);
+        html += `<tr><td><strong>${classLabel(cls)} (${cls})</strong></td>`;
+        html += `<td>${grp.coaches.length}</td>`;
+        html += `<td><strong>${allSeats.length}</strong></td>`;
+        sortedBT.forEach(bt => {
+          const cnt = allSeats.filter(s => s.type === bt).length;
+          html += `<td>${cnt || ''}</td>`;
+        });
+        html += '</tr>';
+      });
+      // Grand total row
+      html += '<tr style="font-weight:600;background:#e8f5e9;"><td>Total</td><td></td>';
+      html += `<td>${grandTotal}</td>`;
+      sortedBT.forEach(bt => { html += `<td>${grandByBT[bt] || ''}</td>`; });
+      html += '</tr>';
+      html += '</tbody></table>';
+
+      // Helper: render a berth number as a clickable chip
+      function berthChip(coachName, num, berthType) {
+        const key = coachName + ':' + num;
+        const sid = _seatByCoachBerth[key];
+        if (sid) {
+          return `<span class="vacant-berth-chip" onclick="showSeatPopup('${sid}');scrollToSeat('${sid}')" title="Click to view berth #${num} details">${num}</span>`;
+        }
+        return `<span class="vacant-berth-chip" style="cursor:default;opacity:0.6;" title="Berth #${num}">${num}</span>`;
+      }
+
+      // Per-class expandable detail with clickable berth chips
+      sortedClasses.forEach(cls => {
+        const grp = vacantByClass[cls];
+        const total = grp.coaches.reduce((s, c) => s + c.seats.length, 0);
+
+        html += `<details class="class-group-toggle" style="margin-bottom:8px;" open>`;
+        html += `<summary><strong>${classLabel(cls)} (${cls})</strong> — ${total} vacant berth${total !== 1 ? 's' : ''}</summary>`;
+        html += `<div style="padding:10px;">`;
+
+        grp.coaches.forEach(c => {
+          const byType = {};
+          c.seats.forEach(s => {
+            const bt = s.type || '?';
+            if (!byType[bt]) byType[bt] = [];
+            byType[bt].push(s.number);
+          });
+          const coachVacant = c.seats.length;
+
+          html += `<div class="vacant-coach-card">`;
+          html += `<div class="vacant-coach-header"><strong>${c.coachName}</strong><span class="vacant-coach-count">${coachVacant}</span></div>`;
+
+          berthTypeOrder.filter(bt => byType[bt]).forEach(bt => {
+            html += `<div class="vacant-berth-group">`;
+            html += `<span class="vacant-berth-label">${bt}</span>`;
+            html += `<div class="vacant-berth-chips">`;
+            byType[bt].sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0)).forEach(num => {
+              html += berthChip(c.coachName, num, bt);
+            });
+            html += `</div></div>`;
+          });
+
+          html += `</div>`;
+        });
+
+        html += `</div></details>`;
+      });
+
+      resultDiv.innerHTML = html;
+    }
+
+    async function fetchCoachData(coachName, cls) {
+      const params = getCommonParams();
+      try {
+        const resp = await fetch('/api/coach-composition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            trainNo: params.trainNo,
+            boardingStation: params.boardingStation,
+            remoteStation: params.boardingStation,
+            trainSourceStation: trainSourceStation || params.boardingStation,
+            jDate: params.jDate,
+            coach: coachName,
+            cls: cls
+          })
+        });
+        const data = await resp.json();
+        if (data.error || data.errorMessage) {
+          document.getElementById('seatMapResult').innerHTML = `<div class="error">${data.errorMessage || data.error}</div>`;
+          return null;
+        }
+        return data;
+      } catch (e) {
+        document.getElementById('seatMapResult').innerHTML = `<div class="error">Request failed: ${e.message}</div>`;
+        return null;
+      }
+    }
+
+    // ── Seat rendering ────────────────────────────────────────────────
+
+    // IRCTC coachComposition response format:
+    // {
+    //   bdd: [
+    //     {
+    //       berthNo: 1, berthCode: "L",
+    //       cabinCoupeNameNo: "1",      // section number
+    //       from: "DHN", to: "FZR",
+    //       bsd: [                      // booking status: split segments
+    //         { splitNo: 1, from: "DHN", to: "GAYA", quota: "GN", occupancy: false },
+    //         { splitNo: 2, from: "GAYA", to: "LKO", quota: "TQ", occupancy: true },
+    //         ...
+    //       ]
+    //     }, ...
+    //   ]
+    // }
+
+    const BERTH_CODE_MAP = {
+      'L': 'LB', 'M': 'MB', 'U': 'UB',
+      'SL': 'SL', 'SU': 'SU',
+      'LB': 'LB', 'MB': 'MB', 'UB': 'UB',
+      'R': 'SL', 'P': 'SU',       // R = Side Lower, P = Side Upper (IRCTC codes)
+      'D': 'LB', 'C': 'CB',       // D = lower in 1A coupe, C = cabin coupe
+    };
+
+    // Quota priority: pick the highest-priority quota from bsd entries
+    // Higher in list = higher priority when multiple quotas exist for one berth
+    const QUOTA_PRIORITY = ['TQ','PT','FT','HP','DF','SS','PQ','YU','HO','LD','RC','RL','US','MC','RE','DP','OS','RS','GQ','PH','LB','GNRS','GN'];
+
+    function pickPrimaryQuota(bsdList) {
+      if (!bsdList.length) return { quota: '', status: '' };
+
+      // Only consider segments where occupancy is true (actually booked)
+      const occupied = bsdList.filter(b => b.occupancy === true);
+      const pool = occupied.length ? occupied : bsdList;
+
+      if (pool.length === 1) return { quota: pool[0].quota || '', status: pool[0].status || '' };
+
+      // Get unique quotas from occupied segments
+      const quotas = [...new Set(pool.map(b => b.quota).filter(Boolean))];
+      if (quotas.length === 1) return { quota: quotas[0], status: pool[0].status || '' };
+
+      // Pick the highest priority quota
+      for (const pq of QUOTA_PRIORITY) {
+        if (quotas.includes(pq)) {
+          const entry = pool.find(b => b.quota === pq);
+          return { quota: pq, status: entry?.status || '' };
+        }
+      }
+      // Fallback to first occupied entry
+      return { quota: pool[0].quota || '', status: pool[0].status || '' };
+    }
+
+    function extractSeats(data) {
+      let raw = data.bdd || data.seatList || data.coachComposition || [];
+      if (Array.isArray(data) && !raw.length) raw = data;
+      return raw.map(normalizeSeat);
+    }
+
+    function normalizeSeat(s) {
+      let from = s.from || '';
+      let to = s.to || '';
+      const bsdList = Array.isArray(s.bsd) ? s.bsd : [];
+      // Seat is occupied if any segment has occupancy: true
+      const occupied = bsdList.some(b => b.occupancy === true);
+
+      let quota, status;
+      if (bsdList.length) {
+        const primary = pickPrimaryQuota(bsdList);
+        quota = primary.quota;
+        status = primary.status;
+      } else {
+        quota = s.quotaName || s.quota || s.bookingStatus || '';
+        status = s.bookingStatus || s.currentStatus || s.status || '';
+      }
+
+      const berthCode = s.berthCode || '';
+      const berthType = BERTH_CODE_MAP[berthCode] || berthCode || '';
+
+      return {
+        number: String(s.berthNo ?? s.seatNumber ?? s.seatNo ?? ''),
+        type: berthType,
+        quota: quota,
+        status: status,
+        occupied: occupied,
+        section: s.cabinCoupeNameNo || '',
+        from: from,
+        to: to,
+        allQuotas: bsdList,
+      };
+    }
+
+    // Build a Quota × Berth Type cross-tab table
+    function renderQuotaBerthTable(seats) {
+      // Collect quota→berthType→count for occupied seats
+      const cross = {};  // { quota: { berthType: count } }
+      const berthTypes = new Set();
+      seats.filter(s => s.occupied).forEach(s => {
+        const q = quotaCode(s.quota);
+        const bt = s.type || '?';
+        berthTypes.add(bt);
+        if (!cross[q]) cross[q] = {};
+        cross[q][bt] = (cross[q][bt] || 0) + 1;
+      });
+      // Also count vacant per berth type
+      const vacantByType = {};
+      seats.filter(s => !s.occupied).forEach(s => {
+        const bt = s.type || '?';
+        berthTypes.add(bt);
+        vacantByType[bt] = (vacantByType[bt] || 0) + 1;
+      });
+
+      const btOrder = ['LB','MB','UB','SL','SU','CB'];
+      const sortedBT = [...berthTypes].sort((a, b) => {
+        const ia = btOrder.indexOf(a), ib = btOrder.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+      const quotas = Object.keys(cross).sort((a, b) => {
+        const ta = Object.values(cross[a]).reduce((s, v) => s + v, 0);
+        const tb = Object.values(cross[b]).reduce((s, v) => s + v, 0);
+        return tb - ta;
+      });
+
+      if (!quotas.length && !Object.keys(vacantByType).length) return '';
+
+      let h = '<div class="quota-summary"><h4>Quota × Berth Type</h4>';
+      h += '<table class="summary-table"><thead><tr><th>Quota</th>';
+      sortedBT.forEach(bt => { h += `<th>${bt}</th>`; });
+      h += '<th>Total</th></tr></thead><tbody>';
+
+      quotas.forEach(q => {
+        const fullName = QUOTA_FULL_NAMES[q] || '';
+        let rowTotal = 0;
+        h += `<tr><td><span class="quota-badge quota-${sanitizeQuota(q)}">${q}</span> <span style="font-size:0.75rem;color:#666;">${fullName}</span></td>`;
+        sortedBT.forEach(bt => {
+          const cnt = (cross[q] && cross[q][bt]) || 0;
+          rowTotal += cnt;
+          h += `<td>${cnt || ''}</td>`;
+        });
+        h += `<td><strong>${rowTotal}</strong></td></tr>`;
+      });
+
+      // Vacant row
+      let vacTotal = 0;
+      h += '<tr style="color:#388e3c;"><td><strong>Vacant</strong></td>';
+      sortedBT.forEach(bt => {
+        const cnt = vacantByType[bt] || 0;
+        vacTotal += cnt;
+        h += `<td>${cnt || ''}</td>`;
+      });
+      h += `<td><strong>${vacTotal}</strong></td></tr>`;
+
+      // Column totals
+      let grandTotal = 0;
+      h += '<tr style="font-weight:600;background:#f5f5f5;"><td>Total</td>';
+      sortedBT.forEach(bt => {
+        let colTotal = (vacantByType[bt] || 0);
+        quotas.forEach(q => { colTotal += (cross[q] && cross[q][bt]) || 0; });
+        grandTotal += colTotal;
+        h += `<td>${colTotal}</td>`;
+      });
+      h += `<td><strong>${grandTotal}</strong></td></tr>`;
+
+      h += '</tbody></table></div>';
+      return h;
+    }
+
+    function renderSingleCoach(data, coachName) {
+      const seats = extractSeats(data);
+
+      if (!seats.length) {
+        return `<div class="error">No seat data found for ${coachName}.</div>
+          <div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>
+          <div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+      }
+
+      const occupiedCount = seats.filter(s => s.occupied).length;
+      const vacantCount = seats.length - occupiedCount;
+      const occPct = Math.round((occupiedCount / seats.length) * 100);
+
+      const quotaCounts = {};
+      seats.filter(s => s.occupied).forEach(s => {
+        const q = quotaCode(s.quota);
+        quotaCounts[q] = (quotaCounts[q] || 0) + 1;
+      });
+
+      const coachType = detectCoachType(coachName);
+
+      let html = `<div class="coach-title">Coach: ${coachName}</div>`;
+
+      // Occupancy bar
+      html += `<div class="occupancy-bar">
+        <div class="occ-stat"><span class="occ-dot occupied"></span> Occupied: <strong>${occupiedCount}</strong></div>
+        <div class="occ-stat"><span class="occ-dot vacant"></span> Vacant: <strong>${vacantCount}</strong></div>
+        <div class="occ-stat">Total: <strong>${seats.length}</strong></div>
+        <div class="occ-progress"><div class="occ-progress-fill" style="width:${occPct}%"></div></div>
+        <span style="font-size:0.8rem;color:#666;">${occPct}% occupied</span>
+      </div>`;
+
+      // Legend (only for occupied quotas + vacant)
+      const allQuotas = [...new Set(seats.filter(s => s.occupied).map(s => quotaCode(s.quota)))];
+      html += '<div class="legend">';
+      html += '<div class="legend-item"><div class="legend-color" style="background:#fff;border:2px dashed #4caf50;"></div><span>Vacant</span></div>';
+      allQuotas.forEach(q => {
+        const cssClass = sanitizeQuota(q);
+        const fullName = QUOTA_FULL_NAMES[q] || q;
+        html += `<div class="legend-item"><div class="legend-color quota-${cssClass}" style="border:none;"></div><span>${q} (${fullName})</span></div>`;
+      });
+      html += '</div>';
+
+      html += `<details class="seat-layout-toggle"><summary>Show Seat Layout (${seats.length} berths)</summary>`;
+      _currentCoachForSeatDiv = coachName;
+      html += renderCoachLayout(seats, coachType);
+      _currentCoachForSeatDiv = '';
+      html += '</details>';
+
+      // Per-coach quota summary (occupied only)
+      html += '<div class="quota-summary"><h4>Quota Summary (Occupied)</h4>';
+      html += '<table class="summary-table"><thead><tr><th>Quota</th><th>Full Name</th><th>Count</th></tr></thead><tbody>';
+      Object.entries(quotaCounts).sort((a, b) => b[1] - a[1]).forEach(([q, count]) => {
+        const fullName = QUOTA_FULL_NAMES[q] || '';
+        html += `<tr><td><span class="quota-badge quota-${sanitizeQuota(q)}">${q}</span></td><td>${fullName}</td><td>${count}</td></tr>`;
+      });
+      html += `<tr style="font-weight:600"><td colspan="2">Occupied</td><td>${occupiedCount}</td></tr>`;
+      html += `<tr style="font-weight:600;color:#388e3c;"><td colspan="2">Vacant</td><td>${vacantCount}</td></tr>`;
+      html += `<tr style="font-weight:600"><td colspan="2">Total</td><td>${seats.length}</td></tr>`;
+      html += '</tbody></table></div>';
+
+      // Quota × Berth Type cross-tab
+      html += renderQuotaBerthTable(seats);
+
+      html += `<div class="raw-toggle" onclick="this.nextElementSibling.classList.toggle('visible')">Show raw response</div>`;
+      html += `<div class="raw-json">${JSON.stringify(data, null, 2)}</div>`;
+      return html;
+    }
+
+    // Official IRCTC quota code → full name (from indianrail.gov.in)
+    const QUOTA_FULL_NAMES = {
+      'GN':   'General Quota',
+      'LD':   'Ladies Quota',
+      'HO':   'Head Quarters/High Official Quota',
+      'DF':   'Defence Quota',
+      'PH':   'Parliament House Quota',
+      'FT':   'Foreign Tourist Quota',
+      'DP':   'Duty Pass Quota',
+      'TQ':   'Tatkal Quota',
+      'PT':   'Premium Tatkal Quota',
+      'SS':   'Female (45+)/Senior Citizen Travelling Alone',
+      'HP':   'Physically Handicapped Quota',
+      'RE':   'Railway Employee Staff on Duty',
+      'GNRS': 'General Quota Road Side',
+      'OS':   'Out Station',
+      'PQ':   'Pooled Quota',
+      'RC':   'Reservation Against Cancellation',
+      'RAC':  'Reservation Against Cancellation',
+      'RS':   'Road Side',
+      'YU':   'Yuva',
+      'LB':   'Lower Berth',
+      'MC':   'MCO/Defence Dept Quota',
+      'US':   'Out Station',
+      'RL':   'Remote Location',
+      'WL':   'Wait List',
+      'CNF':  'Confirmed',
+      'GQ':   'General Quota (Pooled)',
+    };
+
+    // Quota codes that have explicit CSS color rules
+    const QUOTA_CSS_CODES = new Set([
+      'GN','TQ','SS','RL','PQ','HP','FT','LD','HO','DF','YU','RC',
+      'WL','RAC','CNF','US','MC','RE','PT','OS','RS','GQ','PH',
+      'DP','LB','GNRS','UNKNOWN'
+    ]);
+
+    function sanitizeQuota(q) {
+      if (!q) return 'UNKNOWN';
+      const upper = q.toUpperCase().replace(/[^A-Z]/g, '');
+      if (!upper) return 'UNKNOWN';
+      return QUOTA_CSS_CODES.has(upper) ? upper : 'UNKNOWN';
+    }
+
+    // Clean code for grouping
+    function quotaCode(q) {
+      if (!q) return 'UNKNOWN';
+      return q.toUpperCase().replace(/[^A-Z]/g, '') || 'UNKNOWN';
+    }
+
+    // Display label: "GN — General Quota"
+    function quotaLabel(q) {
+      const code = quotaCode(q);
+      const full = QUOTA_FULL_NAMES[code];
+      return full ? `${code} — ${full}` : code;
+    }
+
+    // Short label for legend/badges: just the code
+    function quotaShort(q) {
+      return quotaCode(q);
+    }
+
+    // Format station code with full name: "DHN (Dhanbad)"
+    function stnLabel(code) {
+      if (!code) return '—';
+      const name = stationNameMap[code];
+      return name ? `${code} (${name})` : code;
+    }
+
+    // Coach class code → display name
+    const CLASS_FULL_NAMES = {
+      '1A': 'AC First Class',
+      '2A': 'AC 2-Tier',
+      '3A': 'AC 3-Tier',
+      '3E': 'AC 3-Tier Economy',
+      'SL': 'Sleeper',
+      '2S': 'Second Sitting',
+      'CC': 'AC Chair Car',
+      'EC': 'Executive Chair Car',
+      'EA': 'Anubhuti Class',
+      'FC': 'First Class',
+    };
+
+    function classLabel(code) {
+      return CLASS_FULL_NAMES[code] || code;
+    }
+
+    function detectCoachType(coachName) {
+      const name = coachName.toUpperCase();
+      if (name.startsWith('HA')) return '2A';
+      if (name.startsWith('A')) return '1A';
+      if (name.startsWith('H')) return '2A';
+      if (name.startsWith('B')) return '3A';
+      if (name.startsWith('S')) return 'SL';
+      if (name.startsWith('D')) return '3E';
+      if (name.startsWith('GS')) return '2S';
+      return 'SL';
+    }
+
+    function renderCoachLayout(seats, coachType) {
+      // Group seats by their actual section (cabinCoupeNameNo)
+      const sectionMap = new Map();
+      seats.forEach(s => {
+        const sec = s.section || '?';
+        if (!sectionMap.has(sec)) sectionMap.set(sec, []);
+        sectionMap.get(sec).push(s);
+      });
+
+      // Sort section keys numerically
+      const sectionKeys = [...sectionMap.keys()].sort((a, b) => {
+        const na = parseInt(a) || 0, nb = parseInt(b) || 0;
+        return na - nb;
+      });
+
+      let html = '<div class="seat-map-container">';
+
+      sectionKeys.forEach(secKey => {
+        const secSeats = sectionMap.get(secKey);
+        // Sort by berth number within section
+        secSeats.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+
+        html += `<div class="compartment">`;
+        html += `<div class="compartment-label">Section ${secKey}</div>`;
+
+        // Classify berths into main bay and side berths by type
+        const isSide = s => ['SL','SU'].includes(s.type);
+        const main = secSeats.filter(s => !isSide(s));
+        const side = secSeats.filter(s => isSide(s));
+
+        if (coachType === '3A' || coachType === 'SL') {
+          // 3A/SL: main bay has LB/MB/UB pairs, side has SL/SU
+          // Physical layout (top to bottom): UB row, MB row, LB row
+          const ub = main.filter(s => s.type === 'UB');
+          const mb = main.filter(s => s.type === 'MB');
+          const lb = main.filter(s => s.type === 'LB');
+          const su = side.filter(s => s.type === 'SU');
+          const sl = side.filter(s => s.type === 'SL');
+
+          // Top row: UB pair + SU
+          html += '<div class="berth-row">';
+          ub.forEach(s => { html += seatDiv(s); });
+          if (ub.length < 2) html += '<div class="seat empty-slot"></div>'.repeat(2 - ub.length);
+          html += '<div class="separator"></div>';
+          html += su.length ? seatDiv(su[0]) : '<div class="seat empty-slot"></div>';
+          html += '</div>';
+
+          // Middle row: MB pair + empty side
+          if (mb.length) {
+            html += '<div class="berth-row">';
+            mb.forEach(s => { html += seatDiv(s); });
+            if (mb.length < 2) html += '<div class="seat empty-slot"></div>'.repeat(2 - mb.length);
+            html += '<div class="separator"></div>';
+            html += '<div class="seat empty-slot"></div>';
+            html += '</div>';
+          }
+
+          // Bottom row: LB pair + SL
+          html += '<div class="berth-row">';
+          lb.forEach(s => { html += seatDiv(s); });
+          if (lb.length < 2) html += '<div class="seat empty-slot"></div>'.repeat(2 - lb.length);
+          html += '<div class="separator"></div>';
+          html += sl.length ? seatDiv(sl[0]) : '<div class="seat empty-slot"></div>';
+          html += '</div>';
+
+        } else if (coachType === '2A') {
+          // 2A: main bay has LB/UB pairs, side has SL/SU
+          const ub = main.filter(s => s.type === 'UB');
+          const lb = main.filter(s => s.type === 'LB');
+          const su = side.filter(s => s.type === 'SU');
+          const sl = side.filter(s => s.type === 'SL');
+
+          html += '<div class="berth-row">';
+          ub.forEach(s => { html += seatDiv(s); });
+          if (ub.length < 2) html += '<div class="seat empty-slot"></div>'.repeat(2 - ub.length);
+          html += '<div class="separator"></div>';
+          html += su.length ? seatDiv(su[0]) : '<div class="seat empty-slot"></div>';
+          html += '</div>';
+
+          html += '<div class="berth-row">';
+          lb.forEach(s => { html += seatDiv(s); });
+          if (lb.length < 2) html += '<div class="seat empty-slot"></div>'.repeat(2 - lb.length);
+          html += '<div class="separator"></div>';
+          html += sl.length ? seatDiv(sl[0]) : '<div class="seat empty-slot"></div>';
+          html += '</div>';
+
+        } else if (coachType === '1A') {
+          // 1A: coupes with LB pairs
+          const ub = main.filter(s => s.type === 'UB');
+          const lb = main.filter(s => s.type === 'LB');
+
+          if (ub.length) {
+            html += '<div class="berth-row">';
+            ub.forEach(s => { html += seatDiv(s); });
+            html += '</div>';
+          }
+          html += '<div class="berth-row">';
+          lb.forEach(s => { html += seatDiv(s); });
+          html += '</div>';
+
+        } else {
+          // Generic: just show sorted by number, 4 per row
+          for (let r = 0; r < secSeats.length; r += 4) {
+            html += '<div class="berth-row">';
+            for (let c = 0; c < 4 && (r + c) < secSeats.length; c++) {
+              html += seatDiv(secSeats[r + c]);
+            }
+            html += '</div>';
+          }
+        }
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+      return html;
+    }
+
+    // Store seat data globally for click lookups
+    const _seatDataStore = {};
+    const _seatByCoachBerth = {};  // "CoachName:BerthNo" → seatId
+    let _seatIdCounter = 0;
+    let _currentCoachForSeatDiv = '';  // set by renderCoachLayout before calling seatDiv
+
+    function seatDiv(seat) {
+      if (!seat) return '<div class="seat empty-slot"></div>';
+      const q = sanitizeQuota(seat.quota);
+      const occClass = seat.occupied ? 'occupied' : 'vacant';
+      const seatId = 'seat-' + (_seatIdCounter++);
+
+      // Store full data for popup
+      _seatDataStore[seatId] = seat;
+      if (_currentCoachForSeatDiv) {
+        _seatByCoachBerth[_currentCoachForSeatDiv + ':' + seat.number] = seatId;
+      }
+
+      let tip = `#${seat.number} ${seat.type}`;
+      if (seat.occupied) tip += ` — ${quotaCode(seat.quota)}`;
+      tip += ` (click for details)`;
+
+      return `<div class="seat ${occClass} quota-${q}" id="${seatId}" onclick="showSeatPopup('${seatId}')" title="${tip.replace(/"/g, '&quot;')}">
+        <span class="seat-num">${seat.number}</span>
+        <span class="seat-type">${seat.type}</span>
+      </div>`;
+    }
+
+    function scrollToSeat(seatId) {
+      const el = document.getElementById(seatId);
+      if (!el) return;
+      // Open parent <details> elements so the seat is visible
+      let parent = el.parentElement;
+      while (parent) {
+        if (parent.tagName === 'DETAILS' && !parent.open) parent.open = true;
+        parent = parent.parentElement;
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Flash highlight
+      el.style.outline = '3px solid #1565c0';
+      el.style.outlineOffset = '2px';
+      setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 2000);
+    }
+
+    function showSeatPopup(seatId) {
+      const seat = _seatDataStore[seatId];
+      if (!seat) return;
+
+      // Remove existing popup
+      const existing = document.querySelector('.seat-popup-overlay');
+      if (existing) existing.remove();
+
+      const qCode = quotaCode(seat.quota);
+      const qFull = QUOTA_FULL_NAMES[qCode] || '';
+      const cssClass = sanitizeQuota(seat.quota);
+
+      let bsdHtml = '';
+      if (seat.allQuotas?.length) {
+        const occupiedSegs = seat.allQuotas.filter(b => b.occupancy === true).length;
+        const vacantSegs = seat.allQuotas.length - occupiedSegs;
+        bsdHtml = `<div class="seat-popup-bsd">
+          <h4>Journey Segments (${seat.allQuotas.length} splits — ${occupiedSegs} booked, ${vacantSegs} vacant)</h4>
+          <table><thead><tr><th>#</th><th>Quota</th><th>From</th><th>To</th><th>Status</th></tr></thead><tbody>`;
+        seat.allQuotas.forEach(b => {
+          const isOcc = b.occupancy === true;
+          const statusColor = isOcc ? '#c62828' : '#2e7d32';
+          const statusText = isOcc ? 'Booked' : 'Vacant';
+          bsdHtml += `<tr>
+            <td>${b.splitNo ?? ''}</td>
+            <td><span class="quota-badge quota-${sanitizeQuota(b.quota)}">${b.quota || ''}</span></td>
+            <td>${stnLabel(b.from)}</td>
+            <td>${stnLabel(b.to)}</td>
+            <td><strong style="color:${statusColor}">${statusText}</strong></td>
+          </tr>`;
+        });
+        bsdHtml += '</tbody></table></div>';
+      }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'seat-popup-overlay';
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+      overlay.innerHTML = `
+        <div class="seat-popup">
+          <div class="seat-popup-header">
+            <h3>Berth #${seat.number} — ${seat.type}</h3>
+            <button class="seat-popup-close" onclick="this.closest('.seat-popup-overlay').remove()">&times;</button>
+          </div>
+          <div class="seat-popup-body">
+            <table>
+              <tr><td>Berth No</td><td><strong>${seat.number}</strong></td></tr>
+              <tr><td>Berth Type</td><td>${seat.type}</td></tr>
+              <tr><td>Section</td><td>${seat.section}</td></tr>
+              <tr><td>Status</td><td><strong style="color:${seat.occupied ? '#c62828' : '#2e7d32'}">${seat.occupied ? 'OCCUPIED' : 'VACANT'}</strong></td></tr>
+              ${seat.occupied ? `<tr><td>Primary Quota</td><td><span class="quota-badge quota-${cssClass}">${qCode}</span> ${qFull}</td></tr>` : ''}
+              <tr><td>From</td><td>${stnLabel(seat.from)}</td></tr>
+              <tr><td>To</td><td>${stnLabel(seat.to)}</td></tr>
+            </table>
+            ${bsdHtml}
+            <details class="seat-popup-raw">
+              <summary>Raw Data</summary>
+              <pre>${JSON.stringify(seat, null, 2)}</pre>
+            </details>
+          </div>
+        </div>`;
+
+      document.body.appendChild(overlay);
+    }
+
+    // Close popup on Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const overlay = document.querySelector('.seat-popup-overlay');
+        if (overlay) overlay.remove();
+      }
+    });
+  </script>
+</body>
+</html>
